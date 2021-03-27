@@ -1,0 +1,40 @@
+# Random logs based sent with HSL.
+# 
+# focus on web-servesr, with header logging.
+# Syntax is messed up, not ideal for siem or similar.
+#
+# natti@natti.dev
+
+when RULE_INIT {
+   set static::general_remote_syslog_publisher "/Common/publish_remote_syslog"
+}
+
+when CLIENT_ACCEPTED {
+    set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+    HSL::send $hsl "stuff: c_addr: [IP::client_addr]:[TCP::client_port] - l_addr: [IP::local_addr] - r_addr: [IP::remote_addr] - tc_port: [TCP::client_port] - tl_port: [TCP::local_port]"
+}
+
+when SERVER_CONNECTED {
+  set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+  HSL::send $hsl "ss client [IP::local_addr]:[TCP::local_port]"
+  HSL::send $hsl "ss server [IP::remote_addr]:[TCP::remote_port]"
+  HSL::send $hsl "Established [IP::client_addr]:[TCP::client_port] to [IP::remote_addr]:[TCP::remote_port]"
+}
+when HTTP_REQUEST {
+    set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+    HSL::send $hsl "[IP::client_addr] Requested hostname: [HTTP::host]"
+   set LogString "Client [IP::client_addr]:[TCP::client_port] [HTTP::method] -> [HTTP::host][HTTP::uri]"
+   HSL::send $hsl "============================================="
+   HSL::send $hsl "$LogString (request)"
+   #log local0. "URI: [HTTP::uri]"
+   #log local0. "MET: [HTTP::method]"
+   foreach aHeader [HTTP::header names] {
+      HSL::send $hsl "$aHeader: [HTTP::header value $aHeader]"
+   }
+   HSL::send $hsl "============================================="
+}
+
+when HTTP_RESPONSE {
+   set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+   HSL::send $hsl "Response: [HTTP::status] -- [IP::client_addr]:[TCP::client_port]"
+}
