@@ -1,0 +1,60 @@
+# ASM logging
+# 
+# An iRule mainly used to send ASM violations to a remote syslog server
+#
+# natti@natti.dev
+
+
+
+when RULE_INIT {
+# When the iRule is initialized, set a global variable for the remote syslog server.
+#
+# TO-DO: List how-to for doing this.
+#
+
+   set static::general_remote_syslog_publisher "/Common/publish_remote_syslog"
+}
+
+# Legacy... ignore will be removed.
+#when ASM_REQUEST_BLOCKING
+#{
+# set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+# log local0. "oook2"
+# HSL::send $hsl "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz4xxxxxxxxxxx ASM blocked pls chck"
+#}
+
+
+
+when ASM_REQUEST_VIOLATION {
+# Set the High-Speed-Logging variable
+ set hsl [HSL::open -publisher $static::general_remote_syslog_publisher]
+
+# Set a few variables based on the ASM event
+# TO-DO: OMG... rename the variables...
+# TO-DO: Find the reference table again and include the link here.
+
+ set asmviolationdata [ASM::violation_data]
+ set mysupport_id [lindex $asmviolationdata 1]
+ set myattack_type [lindex $asmviolationdata 5]
+ set myseverity [lindex $asmviolationdata 3]
+ set myaction [lindex $asmviolationdata 6]
+ set mymethod [HTTP::method]
+ set myuri [HTTP::uri]
+ set myhost [HTTP::host]
+ set myclient [IP::client_addr]
+ set mypayload [ASM::payload]
+ 
+ 
+# Debugging equivalent to print('i am here')
+# log local0. "oook2"
+# HSL::send $hsl "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ASM blocked pls chck"
+
+
+# Sending syslog in semi CSV format.
+# Payload may contain sensitive data and is not always suitable for syslog.
+
+ #HSL::send $hsl "ASM_BLOCK: $mysupport_id,$myseverity,$myattack_type,$myclient,$mymethod,$myhost,$myuri,$myaction,\"$mypayload\""
+ HSL::send $hsl "ASM_BLOCK: $mysupport_id,$myseverity,$myattack_type,$myclient,$mymethod,$myhost,$myuri,$myaction"
+
+
+}
