@@ -1,0 +1,67 @@
+#
+# iRule found on f5 docs.
+# https://clouddocs.f5.com/training/community/irules/html/class2/module1/lab2.html
+# (Section 3.1.2.4)
+#
+# Basically can be used to throttle POST requests to a certain URI based on the client IP address.
+# 
+#
+
+when RULE_INIT {
+   # This defines the maximum requests to be served within the timing interval defined by the static::timeout variable below.
+   set static::maxReqs 2;
+
+   # Timer Interval in seconds within which only static::maxReqs Requests are allowed.
+   # (i.e: 10 req per 2 sec == 5 req per sec)
+   # If this timer expires, it means that the limit was not reached for this interval and the request
+   # counting starts over.
+   # Making this timeout large increases memory usage.  Making it too small negatively affects performance.
+   set static::timeout 60;
+}
+
+when HTTP_REQUEST {
+  # The iRule allows throttling for only sepecific Methods.  You list the Methods_to_throttle
+  # in a datagroup.  URIs_to_throttle or Methods_to_throttle.
+  # if you need to throttle by URI use an statement like this:
+  #                               if { [class match [HTTP::uri] equals URIs_to_throttle] }
+  # Note: a URI is everything after the hostname: e.g. /path1/login.aspx?name=user1
+  #
+
+  #if { [HTTP::uri] equals "/path/to/login.aspx" } {
+  # log local0. "gotit"
+  #}
+  if { [HTTP::method] equals "POST" and [HTTP::uri] equals "/path/to/login.aspx" } {
+
+     # The following expects the IP addresses in multiple X-forwarded-for headers.  It picks the first one.
+     if { [HTTP::header exists X-forwarded-for] } {
+        set client_IP_addr [getfield [lindex  [HTTP::header values X-Forwarded-For]  0] "," 1]
+     } else {
+        set client_IP_addr [IP::client_addr]
+     }
+     # The matching below expects a datagroup named: Throttling_Whitelist_IPs
+     # The Condition of the if statement is true if the IP address is NOT in the whitelist.
+     if { not ([class match $client_IP_addr equals Throttling_Whitelist_IPs ] )} {
+         set getcount [table lookup -notouch $client_IP_addr]
+         if { $getcount equals "" } {
+             table set $client_IP_addr "1" $static::timeout $static::timeout
+             # record of this session does not exist, starting new record, request is allowed.
+          } else {
+                if { $getcount < $static::maxReqs } {
+                    #log local0. "Request Count for $client_IP_addr is $getcount"
+                    table incr -notouch $client_IP_addr
+                    # record of this session exists but request is allowed.
+                } else {
+                    table incr -notouch $client_IP_addr
+                    set LogString "Client [IP::client_addr]:[TCP::client_port] [HTTP::method] -> [HTTP::host][HTTP::uri] - $getcount"
+                    log local0. "Potential throttling for: $LogString"
+                     #HTTP::respond 403 content {
+                          #<html>
+                          #<head><title>HTTP Request denied</title></head>
+                          #<body>Your HTTP requests are being throttled.</body>
+                          #</html>
+                     #}
+                }
+         }
+      }
+   }
+}
